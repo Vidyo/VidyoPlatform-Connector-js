@@ -41,64 +41,13 @@
 				} else
 					$("#options").removeClass("hidden");
 
-				// If WebRTC is being used, specify the screen share extension path.
-				if (VCUtils.params.webrtc === "true") {
-					if (status.hasOwnProperty("downloadPathWebRTCExtensionFirefox"))
-						webrtcExtensionPath = status.downloadPathWebRTCExtensionFirefox;
-					else if (status.hasOwnProperty("downloadPathWebRTCExtensionChrome"))
-						webrtcExtensionPath = status.downloadPathWebRTCExtensionChrome;
-				}
 
-				// Determine which Vidyo stack will be used: Native WebRTC, Transcoding WebRTC or Plugin
-				var useTranscodingWebRTC, performMonitorShare;
-				if (status.description.indexOf("Native XMPP + WebRTC") > -1) {
-					// Native WebRTC
-					useTranscodingWebRTC = false;
-					performMonitorShare  = false;
-				} else if (status.description.indexOf("WebRTC successfully loaded") > -1) {
-					// Transcoding WebRTC
-					useTranscodingWebRTC = true;
-					performMonitorShare  = false;
-					++webrtcInitializeAttempts;
-				} else {
-					// Plugin
-					useTranscodingWebRTC = false;
-					performMonitorShare  = true;
-				}
-
-				// After the VidyoClient is successfully initialized a global VC object will become available
-				// All of the VidyoConnector gui and logic is implemented in VidyoConnector.js
-				StartVidyoConnector(VC, useTranscodingWebRTC, performMonitorShare, webrtcExtensionPath, configParams);
-
+				window.VC = new window.VidyoClientLib.VidyoClient('', () => {
+          			StartVidyoConnector(VC, window.VCUtils ? window.VCUtils.params.webrtc : 'true');
+        		});
 				break;
-			case "RETRYING": // The library operating is temporarily paused
-				$("#connectionStatus").html("Temporarily unavailable retrying in " + status.nextTimeout/1000 + " seconds");
-				break;
-			case "FAILED":   // The library operating has stopped
-				// If WebRTC initialization failed, try again up to 3 times.
-				if ((status.description.indexOf("Could not initialize WebRTC transport") > -1) && (webrtcInitializeAttempts < 3)) {
-					// Attempt to start the VidyoConnector again.
-					StartVidyoConnector(VC, VCUtils.params.webrtc, webrtcExtensionPath, configParams);
-					++webrtcInitializeAttempts;
-				} else {
-					ShowFailed(status);
-				}
-				break;
-			case "FAILEDVERSION":   // The library operating has stopped
-				UpdateHelperPaths(status);
-				ShowFailedVersion(status);
-				$("#connectionStatus").html("Failed: " + status.description);
-				break;
-			case "NOTAVAILABLE": // The library is not available
-				UpdateHelperPaths(status);
-				$("#connectionStatus").html(status.description);
-				break;
-            case "TIMEDOUT":   // Transcoding Inactivity Timeout
-                $("#connectionStatus").html("Failed: " + status.description);
-                $("#messages #error").html('Page timed out due to inactivity. Please refresh your browser and try again.');
-                break;
 		}
-		return true; // Return true to reload the plugins if not available
+		return true;
 	}
 	function UpdateHelperPaths(status) {
 		$("#helperPlugInDownload").attr("href", status.downloadPathPlugIn);
@@ -126,21 +75,21 @@
 	}
 
 	function loadVidyoClientLibrary(webrtc, plugin) {
-		// If webrtc, then set webrtcLogLevel
-		var webrtcLogLevel = "";
-		if (webrtc) {
-			// Set the WebRTC log level to either: 'info' (default), 'error', or 'none'
-			if (configParams.webrtcLogLevel === 'info' || configParams.webrtcLogLevel === 'error' || configParams.webrtcLogLevel == 'none')
-				webrtcLogLevel = '&webrtcLogLevel=' + configParams.webrtcLogLevel;
-			else
-				webrtcLogLevel = '&webrtcLogLevel=info';
-		}
-
-		//We need to ensure we're loading the VidyoClient library and listening for the callback.
-		var script = document.createElement('script');
-		script.type = 'text/javascript';
-		script.src = 'https://static.vidyo.io/latest/javascript/VidyoClient/VidyoClient.js?ft=true&onload=onVidyoClientLoaded&webrtc=' + webrtc + '&plugin=' + plugin + webrtcLogLevel;
-		document.getElementsByTagName('head')[0].appendChild(script);
+		// Load VidyoClient.js
+  		var script = document.createElement('script');
+  		script.type = 'text/javascript';
+  		script.src = './latest_build/VidyoClient.js';
+  		script.onload = function() {
+    		onVidyoClientLoaded({ state: 'READY', description: 'Native SCIP + WebRTC' });
+  		};
+  		document.getElementsByTagName('head')[0].appendChild(script);
+  
+  		// Load VidyoClient.css
+  		var style = document.createElement('link');
+  		style.rel = 'stylesheet';
+  		style.type = 'text/css';
+  		style.href = './latest_build/VidyoClient.css';
+  		document.getElementsByTagName('head')[0].appendChild(style);
 	}
 	function joinViaBrowser() {
 		$("#helperText").html("Loading...");
@@ -277,7 +226,7 @@ to hook up all of the events to elements. -->
 		<p>
 			<!-- The portal of our backend service. -->
 			<label>Portal</label>
-			<input type="text" id="portal" class="portal" value="vidyocloud.com">
+			<input type="text" id="portal" class="portal" value="*.platform.vidyo.io">
 		</p>
 		<p>
 			<!-- This is the display name that other users will see.

@@ -4,7 +4,7 @@ function ShowRenderer(vidyoConnector) {
 }
 
 // Run StartVidyoConnector when the VidyoClient is successfully loaded
-function StartVidyoConnector(VC, useTranscodingWebRTC, performMonitorShare, webrtcExtensionPath, configParams) {
+function StartVidyoConnector(VC, webrtc) {
     var vidyoConnector;
     var cameras = {};
     var microphones = {};
@@ -34,7 +34,7 @@ function StartVidyoConnector(VC, useTranscodingWebRTC, performMonitorShare, webr
         registerDeviceListeners(vidyoConnector, cameras, microphones, speakers);
         handleDeviceChange(vidyoConnector, cameras, microphones, speakers);
         handleParticipantChange(vidyoConnector);
-        handleSharing(vidyoConnector, useTranscodingWebRTC, performMonitorShare, webrtcExtensionPath);
+        handleSharing(vidyoConnector, webrtc);
 
         // Populate the connectionStatus with the client version
         vidyoConnector.GetVersion().then(function(version) {
@@ -285,108 +285,120 @@ function handleDeviceChange(vidyoConnector, cameras, microphones, speakers) {
     });
 }
 
-function handleSharing(vidyoConnector, useTranscodingWebRTC, performMonitorShare, webrtcExtensionPath) {
+
+function handleSharing(vidyoConnector, webrtc) {
+    var isSafari = navigator.userAgent.indexOf('Chrome') < 0 && navigator.userAgent.indexOf('Safari') >= 0;
     var monitorShares = {};
     var windowShares  = {};
-    var isSharingWindow = false; // Flag indicating whether a window is currently being shared
+    var isSharingWindow = false;          // Flag indicating whether a window is currently being shared
+    var isSharingMonitor = false;
+    var webrtcMode = (webrtc === "true"); // Whether the app is running in plugin or webrtc mode
 
     // The monitorShares & windowShares associative arrays hold a handle to each window/monitor that are available for sharing.
     // The element with key "0" contains a value of null, which is used to stop sharing.
     monitorShares[0] = null;
     windowShares[0]  = null;
 
-    // In WebRTC (transcoding and native), monitor sharing is included as part of the window sharing API.
-    if (performMonitorShare) {
-        StartMonitorShare();
-    }
 
-    // Sharing functionality differs if Transcoding WebRTC is being used.
-    if (!useTranscodingWebRTC) {
-        StartWindowShare();
-    } else {
-        // In Transcoding WebRTC mode, StartWindowShare() needs to be called each time a new share
-        // is initiated so perform this action when the "Window Share" drop-down list is clicked.
-        $("#windowShares").mousedown(function() {
-            console.log("*** Window Share drop-down clicked. isSharingWindow = " + isSharingWindow);
+    const selectLocalShare = (share) => {
+      // Select the local window share
+      vidyoConnector.SelectLocalWindowShare({
+        localWindowShare: share
+      }).then(function (isSelected) {
+          if(!isSelected){
+            $("#windowShares option[value='0']").prop('selected', true);
+          }
+        console.log("SelectLocalWindowShare Success");
+      }).catch(function (error) {
+        // This API will be rejected in case any error occurred including:
+        // - permission is not given on the OS level (macOS).
+        $("#windowShares option[value='0']").prop('selected', true);
+        console.error("SelectLocalWindowShare Failed:", error);
+      });
+    };
 
-            // Initiate the share selection process only if not already sharing
-            if (isSharingWindow === false) {
-                // Re-initialize the windowShares array
-                windowShares = {};
-                windowShares[0] = null;
+    const selectLocalMonitor = (share) => {
+      // Select the local monitor
+      vidyoConnector.SelectLocalMonitor({
+        localMonitor: share
+      }).then(function(isSelected) {
+        if(!isSelected){
+            $("#monitorShares option[value='0']").prop('selected', true);
+          }
+        console.log("SelectLocalMonitor Success", isSelected);
+      }).catch(function(error) {
+        // This API will be rejected in case any error occurred including:
+        // - permission is not given on the OS level (macOS).
+        $("#monitorShares option[value='0']").prop('selected', true);
+        console.error("SelectLocalMonitor Failed:", error);
+      });
+    };
 
-                // Clear all of the drop-down items other than the first ("None"), which is used to stop sharing
-                $("#windowShares").find('option').not(':first').remove();
 
-                // Start window sharing (in WebRTC mode, this includes monitors)
-                StartWindowShare();
-            }
-        });
-    }
+    StartWindowShare();
+    StartMonitorShare();
 
     function StartWindowShare() {
-        // Register for window share status updates, which operates differently in Transcoding WebRTC vs other modes:
-        //    plugin: onAdded and onRemoved callbacks are received for each available window.
-        //    native webrtc: onAdded callback received for a single item, which when clicked will yield a popup to select a share.
-        //    transcoding webrtc: a popup is displayed (an extension to Firefox/Chrome) which allows the user to
-        //            select a share; once selected, that share will trigger an onAdded event.
+        // Register for window share status updates, which operates differently in plugin vs webrtc:
+        //    plugin: onAdded and onRemoved callbacks are received for each available window
+        //    webrtc: a popup is displayed (an extension to Firefox/Chrome) which allows the user to
+        //            select a share; once selected, that share will trigger an onAdded event
         vidyoConnector.RegisterLocalWindowShareEventListener({
             onAdded: function(localWindowShare) {
-                // In useTranscodingWebRTC mode, select the share which triggered this callback
-                if (useTranscodingWebRTC) {
-                    vidyoConnector.SelectLocalWindowShare({
-                        localWindowShare: localWindowShare
-                    }).then(function() {
-                        console.log("SelectLocalWindowShare Success");
-                    }).catch(function() {
-                        console.error("SelectLocalWindowShare Failed");
-                    });
-                }
-
                 // New share is available so add it to the windowShares array and the drop-down list
                 if (localWindowShare.name != "") {
                     var shareVal;
-                    if (useTranscodingWebRTC) {
-                        shareVal = "Selected Share";
-                    } else {
+                    if (localWindowShare.applicationName) {
                         shareVal = localWindowShare.applicationName + " : " + localWindowShare.name;
+                    } else {
+                        shareVal = localWindowShare.name;
                     }
-                    $("#windowShares").append("<option value='" + window.btoa(localWindowShare.id) + "'>" + shareVal + "</option>");
+                    if(isSafari) {
+                      let button = document.createElement('button');
+                      button.innerHTML = shareVal;
+                      button.id = localWindowShare.id;
+                      button.onclick = (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        selectLocalShare(localWindowShare);
+                      };
+                      $("#windowSharesSafari").append(button);
+                    } else {
+                      $("#windowShares").append("<option value='" + window.btoa(localWindowShare.id) + "'>" + shareVal + "</option>");
+                    }
                     windowShares[window.btoa(localWindowShare.id)] = localWindowShare;
                     console.log("Window share added, name : " + localWindowShare.name + " | id : " + window.btoa(localWindowShare.id));
                 }
             },
             onRemoved: function(localWindowShare) {
                 // Existing share became unavailable
+              if(isSafari) {
+                $("#" + localWindowShare.id).remove();
+              } else {
                 $("#windowShares option[value='" + window.btoa(localWindowShare.id) + "']").remove();
-                delete windowShares[window.btoa(localWindowShare.id)];
+              }
+              delete windowShares[window.btoa(localWindowShare.id)];
             },
             onSelected: function(localWindowShare) {
                 // Share was selected/unselected by you or automatically
                 if (localWindowShare) {
-                    $("#windowShares option[value='" + window.btoa(localWindowShare.id) + "']").prop('selected', true);
+                    if(!isSafari) {
+                      $("#windowShares option[value='" + window.btoa(localWindowShare.id) + "']").prop('selected', true);
+                    }
                     isSharingWindow = true;
                     console.log("Window share selected : " + localWindowShare.name);
                 } else {
+                  if(!isSafari) {
                     $("#windowShares option[value='0']").prop('selected', true);
-                    isSharingWindow = false;
-                    console.log("Stop sharing window");
+                  }
+                  isSharingWindow = false;
                 }
             },
             onStateUpdated: function(localWindowShare, state) {
                 // localWindowShare state was updated
             }
-        }).then(function(result) {
-            if (result) {
-                console.log("RegisterLocalWindowShareEventListener Success");
-            } else {
-                console.error("RegisterLocalWindowShareEventListener Failed");
-                if (webrtcExtensionPath.length === 0) {
-                    alert("Error: cannot initiate window sharing.");
-                } else {
-                    prompt("An extension is needed to initiate window sharing. Navigate to the URL below to install.", webrtcExtensionPath);
-                }
-            }
+        }).then(function() {
+            console.log("RegisterLocalWindowShareEventListener Success");
         }).catch(function() {
             console.error("RegisterLocalWindowShareEventListener Failed");
         });
@@ -398,21 +410,45 @@ function handleSharing(vidyoConnector, useTranscodingWebRTC, performMonitorShare
             onAdded: function(localMonitorShare) {
                 // New share is available so add it to the monitorShares array and the drop-down list
                 if (localMonitorShare.name != "") {
+                  if(isSafari) {
+                    let button = document.createElement('button');
+                    button.innerHTML = localMonitorShare.name;
+                    button.id = localMonitorShare.id;
+                    button.onclick = (e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      selectLocalMonitor(localMonitorShare);
+                    };
+                    $("#monitorSharesSafari").append(button);
+                  } else {
                     $("#monitorShares").append("<option value='" + window.btoa(localMonitorShare.id) + "'>" + localMonitorShare.name + "</option>");
-                    monitorShares[window.btoa(localMonitorShare.id)] = localMonitorShare;
-                    console.log("Monitor share added, name : " + localMonitorShare.name + " | id : " + window.btoa(localMonitorShare.id));
+                  }
+                  monitorShares[window.btoa(localMonitorShare.id)] = localMonitorShare;
+                  console.log("Monitor share added, name : " + localMonitorShare.name + " | id : " + window.btoa(localMonitorShare.id));
                 }
             },
             onRemoved: function(localMonitorShare) {
-                // Existing share became unavailable
-                $("#monitorShares option[value='" + window.btoa(localMonitorShare.id) + "']").remove();
+                if(isSafari) {
+                  $("#" + localMonitorShare.id).remove();
+                } else {
+                  // Existing share became unavailable
+                  $("#monitorShares option[value='" + window.btoa(localMonitorShare.id) + "']").remove();
+                }
                 delete monitorShares[window.btoa(localMonitorShare.id)];
             },
             onSelected: function(localMonitorShare) {
                 // Share was selected/unselected by you or automatically
                 if (localMonitorShare) {
-                    $("#monitorShares option[value='" + window.btoa(localMonitorShare.id) + "']").prop('selected', true);
+                    if(!isSafari) {
+                      $("#monitorShares option[value='" + window.btoa(localMonitorShare.id) + "']").prop('selected', true);
+                    }
                     console.log("Monitor share selected : " + localMonitorShare.name);
+                    isSharingMonitor = true;
+                } else {
+                  if(!isSafari) {
+                    $("#monitorShares option[value='0']").prop('selected', true);
+                  }
+                  isSharingMonitor = false;
                 }
             },
             onStateUpdated: function(localMonitorShare, state) {
@@ -425,45 +461,41 @@ function handleSharing(vidyoConnector, useTranscodingWebRTC, performMonitorShare
         });
     }
 
-    // A monitor was selected from the "Monitor Share" drop-down list (plugin mode only).
-    $("#monitorShares").change(function() {
+    if(isSafari) {
+      $("#monitorSharesButtonNone").click((e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        selectLocalMonitor(null);
+      });
+      $("#windowSharesButtonNone").click((e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        selectLocalShare(null);
+      });
+    } else {
+      // A monitor was selected from the "Monitor Share" drop-down list (plugin mode only).
+      $("#monitorShares").change(function() {
         console.log("*** Monitor shares change called");
 
         // Find the share selected from the drop-down list
         $("#monitorShares option:selected").each(function() {
-            share = monitorShares[$(this).val()];
-
-            // Select the local monitor
-            vidyoConnector.SelectLocalMonitor({
-                localMonitor: share
-            }).then(function() {
-                console.log("SelectLocalMonitor Success");
-            }).catch(function() {
-                console.error("SelectLocalMonitor Failed");
-            });
+          share = monitorShares[$(this).val()];
+          selectLocalMonitor(share);
         });
-    });
-
-    // A window was selected from the "Window Share" drop-down list.
-    // Note: in Transcoding WebRTC mode, this is only called for the "None" option (to stop the share) since
-    //       the share is selected in the onAdded callback of the LocalWindowShareEventListener.
-    $("#windowShares").change(function() {
+      });
+      // A window was selected from the "Window Share" drop-down list.
+      // Note: in webrtc mode, this is only called for the "None" option (to stop the share) since
+      //       the share is selected in the onAdded callback of the LocalWindowShareEventListener.
+      $("#windowShares").change(function () {
         console.log("*** Window shares change called");
 
         // Find the share selected from the drop-down list
-        $("#windowShares option:selected").each(function() {
-            share = windowShares[$(this).val()];
-
-            // Select the local window share
-            vidyoConnector.SelectLocalWindowShare({
-                localWindowShare: share
-            }).then(function() {
-                console.log("SelectLocalWindowShare Success");
-            }).catch(function() {
-                console.error("SelectLocalWindowShare Failed");
-            });
+        $("#windowShares option:selected").each(function () {
+          share = windowShares[$(this).val()];
+          selectLocalShare(share);
         });
-    });
+      });
+    }
 }
 
 function getParticipantName(participant, cb) {
