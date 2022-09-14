@@ -27,7 +27,7 @@ function StartVidyoConnector(VC, webrtc) {
         remoteParticipants: 8,                         // Maximum number of participants to render
         logFileFilter: "warning info@VidyoClient info@VidyoConnector",
         logFileName:"",
-        userData:""
+        userData:0
     }).then(function(vc) {
         vidyoConnector = vc;
         ShowRenderer(vidyoConnector);
@@ -120,11 +120,11 @@ function StartVidyoConnector(VC, webrtc) {
             if ($("#optionsVisibilityButton").hasClass("hideOptions")) {
                 $("#options").addClass("hidden");
                 $("#optionsVisibilityButton").addClass("showOptions").removeClass("hideOptions");
-                $("#renderer").addClass("rendererFullScreen").removeClass("rendererWithOptions");
+                $(".renderer-container").addClass("rendererFullScreen").removeClass("rendererWithOptions");
             } else {
                 $("#options").removeClass("hidden");
                 $("#optionsVisibilityButton").addClass("hideOptions").removeClass("showOptions");
-                $("#renderer").removeClass("rendererFullScreen").addClass("rendererWithOptions");
+                $(".renderer-container").removeClass("rendererFullScreen").addClass("rendererWithOptions");
             }
         });
 
@@ -573,7 +573,7 @@ function connectToConference(vidyoConnector, returnURL) {
             $("#connectionStatus").html("Connected");
             $("#options").addClass("hidden");
             $("#optionsVisibilityButton").addClass("showOptions").removeClass("hideOptions");
-            $("#renderer").addClass("rendererFullScreen").removeClass("rendererWithOptions");
+            $(".renderer-container").addClass("rendererFullScreen").removeClass("rendererWithOptions");
             ShowRenderer(vidyoConnector);
             $("#message").html("");
         },
@@ -590,7 +590,7 @@ function connectToConference(vidyoConnector, returnURL) {
 
             $("#options").removeClass("hidden");
             $("#optionsVisibilityButton").addClass("hideOptions").removeClass("showOptions");
-            $("#renderer").removeClass("rendererFullScreen").addClass("rendererWithOptions");
+            $(".renderer-container").removeClass("rendererFullScreen").addClass("rendererWithOptions");
             ShowRenderer(vidyoConnector);
         }
     }).then(function(status) {

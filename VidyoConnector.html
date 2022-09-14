@@ -28,8 +28,9 @@
 			case "READY":    // The library is operating normally
 				$("#connectionStatus").html("Ready to Connect");
 				$("#helper").addClass("hidden");
+
 				$("#optionsVisibilityButton").removeClass("hidden");
-				$("#renderer").removeClass("hidden");
+				$(".renderer-container").removeClass("hidden");
 				$("#toolbarLeft").removeClass("hidden");
 				$("#toolbarCenter").removeClass("hidden");
 				$("#toolbarRight").removeClass("hidden");
@@ -37,7 +38,7 @@
 				// If configured to autoJoin, then show video full screen immediately
 				if (configParams.autoJoin === "1") {
 					$("#optionsVisibilityButton").addClass("showOptions").removeClass("hideOptions");
-					$("#renderer").addClass("rendererFullScreen").removeClass("rendererWithOptions");
+					$(".renderer-container").addClass("rendererFullScreen").removeClass("rendererWithOptions");
 				} else
 					$("#options").removeClass("hidden");
 
@@ -198,7 +199,7 @@
 		if (hideConfig=="1") {
 			$("#options").addClass("hiddenPermanent");
 			$("#optionsVisibilityButton").addClass("hiddenPermanent");
-			$("#renderer").addClass("rendererFullScreenPermanent");
+			$(".renderer-container").addClass("rendererFullScreenPermanent");
 		}
 
 		if (connectorType == "browser") {
@@ -288,8 +289,9 @@ to hook up all of the events to elements. -->
 			<span id="message"></span>
 		</div>
 	</div>
-	<!-- This is the div into which the Vidyo component will be inserted. -->
-	<div id="renderer" class="rendererWithOptions pluginOverlay hidden">
+	<div id="renderer-container" class="renderer-container rendererWithOptions pluginOverlay hidden">
+		<!-- This is the div into which the Vidyo component will be inserted. -->	
+		<div id="renderer"></div>
 	</div>
 	<div id="toolbarLeft" class="toolbar hidden">
 		<span id="participantStatus"></span>
